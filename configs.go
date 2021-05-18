@@ -1,6 +1,7 @@
 package tgbotapi
 
 import (
+	"fmt"
 	"io"
 	"net/url"
 	"strconv"
@@ -17,11 +18,15 @@ const (
 
 // Constant values for ChatActions
 const (
-	ChatTyping          = "typing"
-	ChatUploadPhoto     = "upload_photo"
-	ChatRecordVideo     = "record_video"
-	ChatUploadVideo     = "upload_video"
-	ChatRecordAudio     = "record_audio"
+	ChatTyping      = "typing"
+	ChatUploadPhoto = "upload_photo"
+	ChatRecordVideo = "record_video"
+	ChatUploadVideo = "upload_video"
+	ChatRecordVoice = "record_voice"
+	ChatUploadVoice = "upload_voice"
+	// Deprecated: use ChatRecordVoice instead.
+	ChatRecordAudio = "record_audio"
+	// Deprecated: use ChatUploadVoice instead.
 	ChatUploadAudio     = "upload_audio"
 	ChatUploadDocument  = "upload_document"
 	ChatFindLocation    = "find_location"
@@ -42,6 +47,54 @@ const (
 	ModeHTML       = "HTML"
 )
 
+// Constant values for update types
+const (
+	// New incoming message of any kind — text, photo, sticker, etc.
+	UpdateTypeMessage = "message"
+
+	// New version of a message that is known to the bot and was edited
+	UpdateTypeEditedMessage = "edited_message"
+
+	// New incoming channel post of any kind — text, photo, sticker, etc.
+	UpdateTypeChannelPost = "channel_post"
+
+	// New version of a channel post that is known to the bot and was edited
+	UpdateTypeEditedChannelPost = "edited_channel_post"
+
+	// New incoming inline query
+	UpdateTypeInlineQuery = "inline_query"
+
+	// The result of an inline query that was chosen by a user and sent to their
+	// chat partner. Please see the documentation on the feedback collecting for
+	// details on how to enable these updates for your bot.
+	UpdateTypeChosenInlineResult = "chosen_inline_result"
+
+	// New incoming callback query
+	UpdateTypeCallbackQuery = "callback_query"
+
+	// New incoming shipping query. Only for invoices with flexible price
+	UpdateTypeShippingQuery = "shipping_query"
+
+	// New incoming pre-checkout query. Contains full information about checkout
+	UpdateTypePreCheckoutQuery = "pre_checkout_query"
+
+	// New poll state. Bots receive only updates about stopped polls and polls
+	// which are sent by the bot
+	UpdateTypePoll = "poll"
+
+	// A user changed their answer in a non-anonymous poll. Bots receive new votes
+	// only in polls that were sent by the bot itself.
+	UpdateTypePollAnswer = "poll_answer"
+
+	// The bot's chat member status was updated in a chat. For private chats, this
+	// update is received only when the bot is blocked or unblocked by the user.
+	UpdateTypeMyChatMember = "my_chat_member"
+
+	// The bot must be an administrator in the chat and must explicitly specify
+	// this update in the list of allowed_updates to receive these updates.
+	UpdateTypeChatMember = "chat_member"
+)
+
 // Library errors
 const (
 	// ErrBadFileType happens when you pass an unknown type
@@ -55,12 +108,19 @@ type Chattable interface {
 	method() string
 }
 
+// RequestFile represents a file associated with a request. May involve
+// uploading a file, or passing an existing ID.
+type RequestFile struct {
+	// The multipart upload field name.
+	Name string
+	// The file to upload.
+	File interface{}
+}
+
 // Fileable is any config type that can be sent that includes a file.
 type Fileable interface {
 	Chattable
-	name() string
-	getFile() interface{}
-	useExistingFile() bool
+	files() []RequestFile
 }
 
 // LogOutConfig is a request to log out of the cloud Bot API server.
@@ -116,28 +176,11 @@ func (chat *BaseChat) params() (Params, error) {
 // BaseFile is a base type for all file config types.
 type BaseFile struct {
 	BaseChat
-	File        interface{}
-	FileID      string
-	UseExisting bool
-	MimeType    string
-	FileSize    int
+	File interface{}
 }
 
 func (file BaseFile) params() (Params, error) {
-	params, err := file.BaseChat.params()
-
-	params.AddNonEmpty("mime_type", file.MimeType)
-	params.AddNonZero("file_size", file.FileSize)
-
-	return params, err
-}
-
-func (file BaseFile) getFile() interface{} {
-	return file.File
-}
-
-func (file BaseFile) useExistingFile() bool {
-	return file.UseExisting
+	return file.BaseChat.params()
 }
 
 // BaseEdit is base type of all chat edits.
@@ -248,6 +291,7 @@ func (config CopyMessageConfig) method() string {
 // PhotoConfig contains information about a SendPhoto request.
 type PhotoConfig struct {
 	BaseFile
+	Thumb           interface{}
 	Caption         string
 	ParseMode       string
 	CaptionEntities []MessageEntity
@@ -259,7 +303,6 @@ func (config PhotoConfig) params() (Params, error) {
 		return params, err
 	}
 
-	params.AddNonEmpty(config.name(), config.FileID)
 	params.AddNonEmpty("caption", config.Caption)
 	params.AddNonEmpty("parse_mode", config.ParseMode)
 	err = params.AddInterface("caption_entities", config.CaptionEntities)
@@ -267,17 +310,30 @@ func (config PhotoConfig) params() (Params, error) {
 	return params, err
 }
 
-func (config PhotoConfig) name() string {
-	return "photo"
-}
-
 func (config PhotoConfig) method() string {
 	return "sendPhoto"
+}
+
+func (config PhotoConfig) files() []RequestFile {
+	files := []RequestFile{{
+		Name: "photo",
+		File: config.File,
+	}}
+
+	if config.Thumb != nil {
+		files = append(files, RequestFile{
+			Name: "thumb",
+			File: config.Thumb,
+		})
+	}
+
+	return files
 }
 
 // AudioConfig contains information about a SendAudio request.
 type AudioConfig struct {
 	BaseFile
+	Thumb           interface{}
 	Caption         string
 	ParseMode       string
 	CaptionEntities []MessageEntity
@@ -292,7 +348,6 @@ func (config AudioConfig) params() (Params, error) {
 		return params, err
 	}
 
-	params.AddNonEmpty(config.name(), config.FileID)
 	params.AddNonZero("duration", config.Duration)
 	params.AddNonEmpty("performer", config.Performer)
 	params.AddNonEmpty("title", config.Title)
@@ -303,17 +358,30 @@ func (config AudioConfig) params() (Params, error) {
 	return params, err
 }
 
-func (config AudioConfig) name() string {
-	return "audio"
-}
-
 func (config AudioConfig) method() string {
 	return "sendAudio"
+}
+
+func (config AudioConfig) files() []RequestFile {
+	files := []RequestFile{{
+		Name: "audio",
+		File: config.File,
+	}}
+
+	if config.Thumb != nil {
+		files = append(files, RequestFile{
+			Name: "thumb",
+			File: config.Thumb,
+		})
+	}
+
+	return files
 }
 
 // DocumentConfig contains information about a SendDocument request.
 type DocumentConfig struct {
 	BaseFile
+	Thumb                       interface{}
 	Caption                     string
 	ParseMode                   string
 	CaptionEntities             []MessageEntity
@@ -323,7 +391,6 @@ type DocumentConfig struct {
 func (config DocumentConfig) params() (Params, error) {
 	params, err := config.BaseFile.params()
 
-	params.AddNonEmpty(config.name(), config.FileID)
 	params.AddNonEmpty("caption", config.Caption)
 	params.AddNonEmpty("parse_mode", config.ParseMode)
 	params.AddBool("disable_content_type_detection", config.DisableContentTypeDetection)
@@ -331,12 +398,24 @@ func (config DocumentConfig) params() (Params, error) {
 	return params, err
 }
 
-func (config DocumentConfig) name() string {
-	return "document"
-}
-
 func (config DocumentConfig) method() string {
 	return "sendDocument"
+}
+
+func (config DocumentConfig) files() []RequestFile {
+	files := []RequestFile{{
+		Name: "document",
+		File: config.File,
+	}}
+
+	if config.Thumb != nil {
+		files = append(files, RequestFile{
+			Name: "thumb",
+			File: config.Thumb,
+		})
+	}
+
+	return files
 }
 
 // StickerConfig contains information about a SendSticker request.
@@ -345,24 +424,24 @@ type StickerConfig struct {
 }
 
 func (config StickerConfig) params() (Params, error) {
-	params, err := config.BaseChat.params()
-
-	params.AddNonEmpty(config.name(), config.FileID)
-
-	return params, err
-}
-
-func (config StickerConfig) name() string {
-	return "sticker"
+	return config.BaseChat.params()
 }
 
 func (config StickerConfig) method() string {
 	return "sendSticker"
 }
 
+func (config StickerConfig) files() []RequestFile {
+	return []RequestFile{{
+		Name: "sticker",
+		File: config.File,
+	}}
+}
+
 // VideoConfig contains information about a SendVideo request.
 type VideoConfig struct {
 	BaseFile
+	Thumb             interface{}
 	Duration          int
 	Caption           string
 	ParseMode         string
@@ -376,7 +455,6 @@ func (config VideoConfig) params() (Params, error) {
 		return params, err
 	}
 
-	params.AddNonEmpty(config.name(), config.FileID)
 	params.AddNonZero("duration", config.Duration)
 	params.AddNonEmpty("caption", config.Caption)
 	params.AddNonEmpty("parse_mode", config.ParseMode)
@@ -386,18 +464,31 @@ func (config VideoConfig) params() (Params, error) {
 	return params, err
 }
 
-func (config VideoConfig) name() string {
-	return "video"
-}
-
 func (config VideoConfig) method() string {
 	return "sendVideo"
+}
+
+func (config VideoConfig) files() []RequestFile {
+	files := []RequestFile{{
+		Name: "video",
+		File: config.File,
+	}}
+
+	if config.Thumb != nil {
+		files = append(files, RequestFile{
+			Name: "thumb",
+			File: config.Thumb,
+		})
+	}
+
+	return files
 }
 
 // AnimationConfig contains information about a SendAnimation request.
 type AnimationConfig struct {
 	BaseFile
 	Duration        int
+	Thumb           interface{}
 	Caption         string
 	ParseMode       string
 	CaptionEntities []MessageEntity
@@ -409,7 +500,6 @@ func (config AnimationConfig) params() (Params, error) {
 		return params, err
 	}
 
-	params.AddNonEmpty(config.name(), config.FileID)
 	params.AddNonZero("duration", config.Duration)
 	params.AddNonEmpty("caption", config.Caption)
 	params.AddNonEmpty("parse_mode", config.ParseMode)
@@ -418,17 +508,30 @@ func (config AnimationConfig) params() (Params, error) {
 	return params, err
 }
 
-func (config AnimationConfig) name() string {
-	return "animation"
-}
-
 func (config AnimationConfig) method() string {
 	return "sendAnimation"
+}
+
+func (config AnimationConfig) files() []RequestFile {
+	files := []RequestFile{{
+		Name: "animation",
+		File: config.File,
+	}}
+
+	if config.Thumb != nil {
+		files = append(files, RequestFile{
+			Name: "thumb",
+			File: config.Thumb,
+		})
+	}
+
+	return files
 }
 
 // VideoNoteConfig contains information about a SendVideoNote request.
 type VideoNoteConfig struct {
 	BaseFile
+	Thumb    interface{}
 	Duration int
 	Length   int
 }
@@ -436,24 +539,36 @@ type VideoNoteConfig struct {
 func (config VideoNoteConfig) params() (Params, error) {
 	params, err := config.BaseChat.params()
 
-	params.AddNonEmpty(config.name(), config.FileID)
 	params.AddNonZero("duration", config.Duration)
 	params.AddNonZero("length", config.Length)
 
 	return params, err
 }
 
-func (config VideoNoteConfig) name() string {
-	return "video_note"
-}
-
 func (config VideoNoteConfig) method() string {
 	return "sendVideoNote"
+}
+
+func (config VideoNoteConfig) files() []RequestFile {
+	files := []RequestFile{{
+		Name: "video_note",
+		File: config.File,
+	}}
+
+	if config.Thumb != nil {
+		files = append(files, RequestFile{
+			Name: "thumb",
+			File: config.Thumb,
+		})
+	}
+
+	return files
 }
 
 // VoiceConfig contains information about a SendVoice request.
 type VoiceConfig struct {
 	BaseFile
+	Thumb           interface{}
 	Caption         string
 	ParseMode       string
 	CaptionEntities []MessageEntity
@@ -466,7 +581,6 @@ func (config VoiceConfig) params() (Params, error) {
 		return params, err
 	}
 
-	params.AddNonEmpty(config.name(), config.FileID)
 	params.AddNonZero("duration", config.Duration)
 	params.AddNonEmpty("caption", config.Caption)
 	params.AddNonEmpty("parse_mode", config.ParseMode)
@@ -475,12 +589,24 @@ func (config VoiceConfig) params() (Params, error) {
 	return params, err
 }
 
-func (config VoiceConfig) name() string {
-	return "voice"
-}
-
 func (config VoiceConfig) method() string {
 	return "sendVoice"
+}
+
+func (config VoiceConfig) files() []RequestFile {
+	files := []RequestFile{{
+		Name: "voice",
+		File: config.File,
+	}}
+
+	if config.Thumb != nil {
+		files = append(files, RequestFile{
+			Name: "thumb",
+			File: config.Thumb,
+		})
+	}
+
+	return files
 }
 
 // LocationConfig contains information about a SendLocation request.
@@ -672,7 +798,7 @@ func (config GameConfig) method() string {
 
 // SetGameScoreConfig allows you to update the game score in a chat.
 type SetGameScoreConfig struct {
-	UserID             int
+	UserID             int64
 	Score              int
 	Force              bool
 	DisableEditMessage bool
@@ -685,7 +811,7 @@ type SetGameScoreConfig struct {
 func (config SetGameScoreConfig) params() (Params, error) {
 	params := make(Params)
 
-	params.AddNonZero("user_id", config.UserID)
+	params.AddNonZero64("user_id", config.UserID)
 	params.AddNonZero("scrore", config.Score)
 	params.AddBool("disable_edit_message", config.DisableEditMessage)
 
@@ -705,8 +831,8 @@ func (config SetGameScoreConfig) method() string {
 
 // GetGameHighScoresConfig allows you to fetch the high scores for a game.
 type GetGameHighScoresConfig struct {
-	UserID          int
-	ChatID          int
+	UserID          int64
+	ChatID          int64
 	ChannelUsername string
 	MessageID       int
 	InlineMessageID string
@@ -715,7 +841,7 @@ type GetGameHighScoresConfig struct {
 func (config GetGameHighScoresConfig) params() (Params, error) {
 	params := make(Params)
 
-	params.AddNonZero("user_id", config.UserID)
+	params.AddNonZero64("user_id", config.UserID)
 
 	if config.InlineMessageID != "" {
 		params["inline_message_id"] = config.InlineMessageID
@@ -801,7 +927,7 @@ func (config EditMessageCaptionConfig) method() string {
 	return "editMessageCaption"
 }
 
-// EditMessageMediaConfig contains information about editing a message's media.
+// EditMessageMediaConfig allows you to make an editMessageMedia request.
 type EditMessageMediaConfig struct {
 	BaseEdit
 
@@ -814,10 +940,17 @@ func (EditMessageMediaConfig) method() string {
 
 func (config EditMessageMediaConfig) params() (Params, error) {
 	params, err := config.BaseEdit.params()
+	if err != nil {
+		return params, err
+	}
 
-	params.AddInterface("media", config.Media)
+	err = params.AddInterface("media", prepareInputMediaParam(config.Media, 0))
 
 	return params, err
+}
+
+func (config EditMessageMediaConfig) files() []RequestFile {
+	return prepareInputMediaFile(config.Media, 0)
 }
 
 // EditMessageReplyMarkupConfig allows you to modify the reply markup
@@ -850,7 +983,7 @@ func (StopPollConfig) method() string {
 // UserProfilePhotosConfig contains information about a
 // GetUserProfilePhotos request.
 type UserProfilePhotosConfig struct {
-	UserID int
+	UserID int64
 	Offset int
 	Limit  int
 }
@@ -862,7 +995,7 @@ func (UserProfilePhotosConfig) method() string {
 func (config UserProfilePhotosConfig) params() (Params, error) {
 	params := make(Params)
 
-	params.AddNonZero("user_id", config.UserID)
+	params.AddNonZero64("user_id", config.UserID)
 	params.AddNonZero("offset", config.Offset)
 	params.AddNonZero("limit", config.Limit)
 
@@ -888,9 +1021,10 @@ func (config FileConfig) params() (Params, error) {
 
 // UpdateConfig contains information about a GetUpdates request.
 type UpdateConfig struct {
-	Offset  int
-	Limit   int
-	Timeout int
+	Offset         int
+	Limit          int
+	Timeout        int
+	AllowedUpdates []string
 }
 
 func (UpdateConfig) method() string {
@@ -903,6 +1037,7 @@ func (config UpdateConfig) params() (Params, error) {
 	params.AddNonZero("offset", config.Offset)
 	params.AddNonZero("limit", config.Limit)
 	params.AddNonZero("timeout", config.Timeout)
+	params.AddInterface("allowed_updates", config.AllowedUpdates)
 
 	return params, nil
 }
@@ -930,22 +1065,21 @@ func (config WebhookConfig) params() (Params, error) {
 
 	params.AddNonEmpty("ip_address", config.IPAddress)
 	params.AddNonZero("max_connections", config.MaxConnections)
-	params.AddInterface("allowed_updates", config.AllowedUpdates)
+	err := params.AddInterface("allowed_updates", config.AllowedUpdates)
 	params.AddBool("drop_pending_updates", config.DropPendingUpdates)
 
-	return params, nil
+	return params, err
 }
 
-func (config WebhookConfig) name() string {
-	return "certificate"
-}
+func (config WebhookConfig) files() []RequestFile {
+	if config.Certificate != nil {
+		return []RequestFile{{
+			Name: "certificate",
+			File: config.Certificate,
+		}}
+	}
 
-func (config WebhookConfig) getFile() interface{} {
-	return config.Certificate
-}
-
-func (config WebhookConfig) useExistingFile() bool {
-	return config.URL != nil
+	return nil
 }
 
 // DeleteWebhookConfig is a helper to delete a webhook.
@@ -973,13 +1107,16 @@ type FileBytes struct {
 }
 
 // FileReader contains information about a reader to upload as a File.
-// If Size is -1, it will read the entire Reader into memory to
-// calculate a Size.
 type FileReader struct {
 	Name   string
 	Reader io.Reader
-	Size   int64
 }
+
+// FileURL is a URL to use as a file for a request.
+type FileURL string
+
+// FileID is an ID of a file already uploaded to Telegram.
+type FileID string
 
 // InlineConfig contains information on making an InlineQuery response.
 type InlineConfig struct {
@@ -1041,7 +1178,7 @@ type ChatMemberConfig struct {
 	ChatID             int64
 	SuperGroupUsername string
 	ChannelUsername    string
-	UserID             int
+	UserID             int64
 }
 
 // UnbanChatMemberConfig allows you to unban a user.
@@ -1058,7 +1195,7 @@ func (config UnbanChatMemberConfig) params() (Params, error) {
 	params := make(Params)
 
 	params.AddFirstValid("chat_id", config.ChatID, config.SuperGroupUsername, config.ChannelUsername)
-	params.AddNonZero("user_id", config.UserID)
+	params.AddNonZero64("user_id", config.UserID)
 	params.AddBool("only_if_banned", config.OnlyIfBanned)
 
 	return params, nil
@@ -1067,7 +1204,8 @@ func (config UnbanChatMemberConfig) params() (Params, error) {
 // KickChatMemberConfig contains extra fields to kick user
 type KickChatMemberConfig struct {
 	ChatMemberConfig
-	UntilDate int64
+	UntilDate      int64
+	RevokeMessages bool
 }
 
 func (config KickChatMemberConfig) method() string {
@@ -1078,8 +1216,9 @@ func (config KickChatMemberConfig) params() (Params, error) {
 	params := make(Params)
 
 	params.AddFirstValid("chat_id", config.ChatID, config.SuperGroupUsername)
-	params.AddNonZero("user_id", config.UserID)
+	params.AddNonZero64("user_id", config.UserID)
 	params.AddNonZero64("until_date", config.UntilDate)
+	params.AddBool("revoke_messages", config.RevokeMessages)
 
 	return params, nil
 }
@@ -1099,7 +1238,7 @@ func (config RestrictChatMemberConfig) params() (Params, error) {
 	params := make(Params)
 
 	params.AddFirstValid("chat_id", config.ChatID, config.SuperGroupUsername, config.ChannelUsername)
-	params.AddNonZero("user_id", config.UserID)
+	params.AddNonZero64("user_id", config.UserID)
 
 	err := params.AddInterface("permissions", config.Permissions)
 	params.AddNonZero64("until_date", config.UntilDate)
@@ -1110,15 +1249,17 @@ func (config RestrictChatMemberConfig) params() (Params, error) {
 // PromoteChatMemberConfig contains fields to promote members of chat
 type PromoteChatMemberConfig struct {
 	ChatMemberConfig
-	IsAnonymous        bool
-	CanChangeInfo      bool
-	CanPostMessages    bool
-	CanEditMessages    bool
-	CanDeleteMessages  bool
-	CanInviteUsers     bool
-	CanRestrictMembers bool
-	CanPinMessages     bool
-	CanPromoteMembers  bool
+	IsAnonymous         bool
+	CanManageChat       bool
+	CanChangeInfo       bool
+	CanPostMessages     bool
+	CanEditMessages     bool
+	CanDeleteMessages   bool
+	CanManageVoiceChats bool
+	CanInviteUsers      bool
+	CanRestrictMembers  bool
+	CanPinMessages      bool
+	CanPromoteMembers   bool
 }
 
 func (config PromoteChatMemberConfig) method() string {
@@ -1129,13 +1270,15 @@ func (config PromoteChatMemberConfig) params() (Params, error) {
 	params := make(Params)
 
 	params.AddFirstValid("chat_id", config.ChatID, config.SuperGroupUsername, config.ChannelUsername)
-	params.AddNonZero("user_id", config.UserID)
+	params.AddNonZero64("user_id", config.UserID)
 
 	params.AddBool("is_anonymous", config.IsAnonymous)
+	params.AddBool("can_manage_chat", config.CanManageChat)
 	params.AddBool("can_change_info", config.CanChangeInfo)
 	params.AddBool("can_post_messages", config.CanPostMessages)
 	params.AddBool("can_edit_messages", config.CanEditMessages)
 	params.AddBool("can_delete_messages", config.CanDeleteMessages)
+	params.AddBool("can_manage_voice_chats", config.CanManageVoiceChats)
 	params.AddBool("can_invite_users", config.CanInviteUsers)
 	params.AddBool("can_restrict_members", config.CanRestrictMembers)
 	params.AddBool("can_pin_messages", config.CanPinMessages)
@@ -1159,7 +1302,7 @@ func (config SetChatAdministratorCustomTitle) params() (Params, error) {
 	params := make(Params)
 
 	params.AddFirstValid("chat_id", config.ChatID, config.SuperGroupUsername, config.ChannelUsername)
-	params.AddNonZero("user_id", config.UserID)
+	params.AddNonZero64("user_id", config.UserID)
 	params.AddNonEmpty("custom_title", config.CustomTitle)
 
 	return params, nil
@@ -1222,9 +1365,9 @@ func (config SetChatPermissionsConfig) params() (Params, error) {
 	params := make(Params)
 
 	params.AddFirstValid("chat_id", config.ChatID, config.SuperGroupUsername)
-	params.AddInterface("permissions", config.Permissions)
+	err := params.AddInterface("permissions", config.Permissions)
 
-	return params, nil
+	return params, err
 }
 
 // ChatInviteLinkConfig contains information about getting a chat link.
@@ -1242,6 +1385,77 @@ func (config ChatInviteLinkConfig) params() (Params, error) {
 	params := make(Params)
 
 	params.AddFirstValid("chat_id", config.ChatID, config.SuperGroupUsername)
+
+	return params, nil
+}
+
+// CreateChatInviteLinkConfig allows you to create an additional invite link for
+// a chat. The bot must be an administrator in the chat for this to work and
+// must have the appropriate admin rights. The link can be revoked using the
+// RevokeChatInviteLinkConfig.
+type CreateChatInviteLinkConfig struct {
+	ChatConfig
+	ExpireDate  int
+	MemberLimit int
+}
+
+func (CreateChatInviteLinkConfig) method() string {
+	return "createChatInviteLink"
+}
+
+func (config CreateChatInviteLinkConfig) params() (Params, error) {
+	params := make(Params)
+
+	params.AddFirstValid("chat_id", config.ChatID, config.SuperGroupUsername)
+	params.AddNonZero("expire_date", config.ExpireDate)
+	params.AddNonZero("member_limit", config.MemberLimit)
+
+	return params, nil
+}
+
+// EditChatInviteLinkConfig allows you to edit a non-primary invite link created
+// by the bot. The bot must be an administrator in the chat for this to work and
+// must have the appropriate admin rights.
+type EditChatInviteLinkConfig struct {
+	ChatConfig
+	InviteLink  string
+	ExpireDate  int
+	MemberLimit int
+}
+
+func (EditChatInviteLinkConfig) method() string {
+	return "editChatInviteLink"
+}
+
+func (config EditChatInviteLinkConfig) params() (Params, error) {
+	params := make(Params)
+
+	params.AddFirstValid("chat_id", config.ChatID, config.SuperGroupUsername)
+	params["invite_link"] = config.InviteLink
+	params.AddNonZero("expire_date", config.ExpireDate)
+	params.AddNonZero("member_limit", config.MemberLimit)
+
+	return params, nil
+}
+
+// RevokeChatInviteLinkConfig allows you to revoke an invite link created by the
+// bot. If the primary link is revoked, a new link is automatically generated.
+// The bot must be an administrator in the chat for this to work and must have
+// the appropriate admin rights.
+type RevokeChatInviteLinkConfig struct {
+	ChatConfig
+	InviteLink string
+}
+
+func (RevokeChatInviteLinkConfig) method() string {
+	return "revokeChatInviteLink"
+}
+
+func (config RevokeChatInviteLinkConfig) params() (Params, error) {
+	params := make(Params)
+
+	params.AddFirstValid("chat_id", config.ChatID, config.SuperGroupUsername)
+	params["invite_link"] = config.InviteLink
 
 	return params, nil
 }
@@ -1268,14 +1482,14 @@ func (config LeaveChatConfig) params() (Params, error) {
 type ChatConfigWithUser struct {
 	ChatID             int64
 	SuperGroupUsername string
-	UserID             int
+	UserID             int64
 }
 
 func (config ChatConfigWithUser) params() (Params, error) {
 	params := make(Params)
 
 	params.AddFirstValid("chat_id", config.ChatID, config.SuperGroupUsername)
-	params.AddNonZero("user_id", config.UserID)
+	params.AddNonZero64("user_id", config.UserID)
 
 	return params, nil
 }
@@ -1296,9 +1510,11 @@ type InvoiceConfig struct {
 	Description               string         // required
 	Payload                   string         // required
 	ProviderToken             string         // required
-	StartParameter            string         // required
 	Currency                  string         // required
 	Prices                    []LabeledPrice // required
+	MaxTipAmount              int
+	SuggestedTipAmounts       []int
+	StartParameter            string
 	ProviderData              string
 	PhotoURL                  string
 	PhotoSize                 int
@@ -1323,10 +1539,14 @@ func (config InvoiceConfig) params() (Params, error) {
 	params["description"] = config.Description
 	params["payload"] = config.Payload
 	params["provider_token"] = config.ProviderToken
-	params["start_parameter"] = config.StartParameter
 	params["currency"] = config.Currency
+	if err = params.AddInterface("prices", config.Prices); err != nil {
+		return params, err
+	}
 
-	err = params.AddInterface("prices", config.Prices)
+	params.AddNonZero("max_tip_amount", config.MaxTipAmount)
+	err = params.AddInterface("suggested_tip_amounts", config.SuggestedTipAmounts)
+	params.AddNonEmpty("start_parameter", config.StartParameter)
 	params.AddNonEmpty("provider_data", config.ProviderData)
 	params.AddNonEmpty("photo_url", config.PhotoURL)
 	params.AddNonZero("photo_size", config.PhotoSize)
@@ -1483,16 +1703,11 @@ func (config SetChatPhotoConfig) method() string {
 	return "setChatPhoto"
 }
 
-func (config SetChatPhotoConfig) name() string {
-	return "photo"
-}
-
-func (config SetChatPhotoConfig) getFile() interface{} {
-	return config.File
-}
-
-func (config SetChatPhotoConfig) useExistingFile() bool {
-	return config.UseExisting
+func (config SetChatPhotoConfig) files() []RequestFile {
+	return []RequestFile{{
+		Name: "photo",
+		File: config.File,
+	}}
 }
 
 // DeleteChatPhotoConfig allows you to delete a group, supergroup, or channel's photo.
@@ -1590,18 +1805,11 @@ func (config UploadStickerConfig) params() (Params, error) {
 	return params, nil
 }
 
-func (config UploadStickerConfig) name() string {
-	return "png_sticker"
-}
-
-func (config UploadStickerConfig) getFile() interface{} {
-	return config.PNGSticker
-}
-
-func (config UploadStickerConfig) useExistingFile() bool {
-	_, ok := config.PNGSticker.(string)
-
-	return ok
+func (config UploadStickerConfig) files() []RequestFile {
+	return []RequestFile{{
+		Name: "png_sticker",
+		File: config.PNGSticker,
+	}}
 }
 
 // NewStickerSetConfig allows creating a new sticker set.
@@ -1629,12 +1837,6 @@ func (config NewStickerSetConfig) params() (Params, error) {
 	params["name"] = config.Name
 	params["title"] = config.Title
 
-	if sticker, ok := config.PNGSticker.(string); ok {
-		params[config.name()] = sticker
-	} else if sticker, ok := config.TGSSticker.(string); ok {
-		params[config.name()] = sticker
-	}
-
 	params["emojis"] = config.Emojis
 
 	params.AddBool("contains_masks", config.ContainsMasks)
@@ -1644,26 +1846,18 @@ func (config NewStickerSetConfig) params() (Params, error) {
 	return params, err
 }
 
-func (config NewStickerSetConfig) getFile() interface{} {
-	return config.PNGSticker
-}
-
-func (config NewStickerSetConfig) name() string {
-	return "png_sticker"
-}
-
-func (config NewStickerSetConfig) useExistingFile() bool {
+func (config NewStickerSetConfig) files() []RequestFile {
 	if config.PNGSticker != nil {
-		_, ok := config.PNGSticker.(string)
-		return ok
+		return []RequestFile{{
+			Name: "png_sticker",
+			File: config.PNGSticker,
+		}}
 	}
 
-	if config.TGSSticker != nil {
-		_, ok := config.TGSSticker.(string)
-		return ok
-	}
-
-	panic("NewStickerSetConfig had nil PNGSticker and TGSSticker")
+	return []RequestFile{{
+		Name: "tgs_sticker",
+		File: config.TGSSticker,
+	}}
 }
 
 // AddStickerConfig allows you to add a sticker to a set.
@@ -1687,29 +1881,24 @@ func (config AddStickerConfig) params() (Params, error) {
 	params["name"] = config.Name
 	params["emojis"] = config.Emojis
 
-	if sticker, ok := config.PNGSticker.(string); ok {
-		params[config.name()] = sticker
-	} else if sticker, ok := config.TGSSticker.(string); ok {
-		params[config.name()] = sticker
-	}
-
 	err := params.AddInterface("mask_position", config.MaskPosition)
 
 	return params, err
 }
 
-func (config AddStickerConfig) name() string {
-	return "png_sticker"
-}
+func (config AddStickerConfig) files() []RequestFile {
+	if config.PNGSticker != nil {
+		return []RequestFile{{
+			Name: "png_sticker",
+			File: config.PNGSticker,
+		}}
+	}
 
-func (config AddStickerConfig) getFile() interface{} {
-	return config.PNGSticker
-}
+	return []RequestFile{{
+		Name: "tgs_sticker",
+		File: config.TGSSticker,
+	}}
 
-func (config AddStickerConfig) useExistingFile() bool {
-	_, ok := config.PNGSticker.(string)
-
-	return ok
 }
 
 // SetStickerPositionConfig allows you to change the position of a sticker in a set.
@@ -1751,7 +1940,7 @@ func (config DeleteStickerConfig) params() (Params, error) {
 // SetStickerSetThumbConfig allows you to set the thumbnail for a sticker set.
 type SetStickerSetThumbConfig struct {
 	Name   string
-	UserID int
+	UserID int64
 	Thumb  interface{}
 }
 
@@ -1763,26 +1952,16 @@ func (config SetStickerSetThumbConfig) params() (Params, error) {
 	params := make(Params)
 
 	params["name"] = config.Name
-	params.AddNonZero("user_id", config.UserID)
-
-	if thumb, ok := config.Thumb.(string); ok {
-		params["thumb"] = thumb
-	}
+	params.AddNonZero64("user_id", config.UserID)
 
 	return params, nil
 }
 
-func (config SetStickerSetThumbConfig) name() string {
-	return "thumb"
-}
-
-func (config SetStickerSetThumbConfig) getFile() interface{} {
-	return config.Thumb
-}
-
-func (config SetStickerSetThumbConfig) useExistingFile() bool {
-	_, ok := config.Thumb.(string)
-	return ok
+func (config SetStickerSetThumbConfig) files() []RequestFile {
+	return []RequestFile{{
+		Name: "thumb",
+		File: config.Thumb,
+	}}
 }
 
 // SetChatStickerSetConfig allows you to set the sticker set for a supergroup.
@@ -1844,13 +2023,42 @@ func (config MediaGroupConfig) params() (Params, error) {
 	params := make(Params)
 
 	params.AddFirstValid("chat_id", config.ChatID, config.ChannelUsername)
-	if err := params.AddInterface("media", config.Media); err != nil {
-		return params, nil
-	}
 	params.AddBool("disable_notification", config.DisableNotification)
 	params.AddNonZero("reply_to_message_id", config.ReplyToMessageID)
 
-	return params, nil
+	err := params.AddInterface("media", prepareInputMediaForParams(config.Media))
+
+	return params, err
+}
+
+func (config MediaGroupConfig) files() []RequestFile {
+	return prepareInputMediaForFiles(config.Media)
+}
+
+// DiceConfig contains information about a sendDice request.
+type DiceConfig struct {
+	BaseChat
+	// Emoji on which the dice throw animation is based.
+	// Currently, must be one of 🎲, 🎯, 🏀, ⚽, 🎳, or 🎰.
+	// Dice can have values 1-6 for 🎲, 🎯, and 🎳, values 1-5 for 🏀 and ⚽,
+	// and values 1-64 for 🎰.
+	// Defaults to “🎲”
+	Emoji string
+}
+
+func (config DiceConfig) method() string {
+	return "sendDice"
+}
+
+func (config DiceConfig) params() (Params, error) {
+	params, err := config.BaseChat.params()
+	if err != nil {
+		return params, err
+	}
+
+	params.AddNonEmpty("emoji", config.Emoji)
+
+	return params, err
 }
 
 // GetMyCommandsConfig gets a list of the currently registered commands.
@@ -1881,27 +2089,170 @@ func (config SetMyCommandsConfig) params() (Params, error) {
 	return params, err
 }
 
-// DiceConfig contains information about a sendDice request.
-type DiceConfig struct {
-	BaseChat
-	// Emoji on which the dice throw animation is based.
-	// Currently, must be one of “🎲”, “🎯”, or “🏀”.
-	// Dice can have values 1-6 for “🎲” and “🎯”, and values 1-5 for “🏀”.
-	// Defaults to “🎲”
-	Emoji string
-}
+// prepareInputMediaParam evaluates a single InputMedia and determines if it
+// needs to be modified for a successful upload. If it returns nil, then the
+// value does not need to be included in the params. Otherwise, it will return
+// the same type as was originally provided.
+//
+// The idx is used to calculate the file field name. If you only have a single
+// file, 0 may be used. It is formatted into "attach://file-%d" for the primary
+// media and "attach://file-%d-thumb" for thumbnails.
+//
+// It is expected to be used in conjunction with prepareInputMediaFile.
+func prepareInputMediaParam(inputMedia interface{}, idx int) interface{} {
+	switch m := inputMedia.(type) {
+	case InputMediaPhoto:
+		switch m.Media.(type) {
+		case string, FileBytes, FileReader:
+			m.Media = fmt.Sprintf("attach://file-%d", idx)
+		}
 
-func (config DiceConfig) method() string {
-	return "sendDice"
-}
+		return m
+	case InputMediaVideo:
+		switch m.Media.(type) {
+		case string, FileBytes, FileReader:
+			m.Media = fmt.Sprintf("attach://file-%d", idx)
+		}
 
-func (config DiceConfig) params() (Params, error) {
-	params, err := config.BaseChat.params()
-	if err != nil {
-		return params, err
+		switch m.Thumb.(type) {
+		case string, FileBytes, FileReader:
+			m.Thumb = fmt.Sprintf("attach://file-%d-thumb", idx)
+		}
+
+		return m
+	case InputMediaAudio:
+		switch m.Media.(type) {
+		case string, FileBytes, FileReader:
+			m.Media = fmt.Sprintf("attach://file-%d", idx)
+		}
+
+		switch m.Thumb.(type) {
+		case string, FileBytes, FileReader:
+			m.Thumb = fmt.Sprintf("attach://file-%d-thumb", idx)
+		}
+
+		return m
+	case InputMediaDocument:
+		switch m.Media.(type) {
+		case string, FileBytes, FileReader:
+			m.Media = fmt.Sprintf("attach://file-%d", idx)
+		}
+
+		switch m.Thumb.(type) {
+		case string, FileBytes, FileReader:
+			m.Thumb = fmt.Sprintf("attach://file-%d-thumb", idx)
+		}
+
+		return m
 	}
 
-	params.AddNonEmpty("emoji", config.Emoji)
+	return nil
+}
 
-	return params, err
+// prepareInputMediaFile generates an array of RequestFile to provide for
+// Fileable's files method. It returns an array as a single InputMedia may have
+// multiple files, for the primary media and a thumbnail.
+//
+// The idx parameter is used to generate file field names. It uses the names
+// "file-%d" for the main file and "file-%d-thumb" for the thumbnail.
+//
+// It is expected to be used in conjunction with prepareInputMediaParam.
+func prepareInputMediaFile(inputMedia interface{}, idx int) []RequestFile {
+	files := []RequestFile{}
+
+	switch m := inputMedia.(type) {
+	case InputMediaPhoto:
+		switch f := m.Media.(type) {
+		case string, FileBytes, FileReader:
+			files = append(files, RequestFile{
+				Name: fmt.Sprintf("file-%d", idx),
+				File: f,
+			})
+		}
+	case InputMediaVideo:
+		switch f := m.Media.(type) {
+		case string, FileBytes, FileReader:
+			files = append(files, RequestFile{
+				Name: fmt.Sprintf("file-%d", idx),
+				File: f,
+			})
+		}
+
+		switch f := m.Thumb.(type) {
+		case string, FileBytes, FileReader:
+			files = append(files, RequestFile{
+				Name: fmt.Sprintf("file-%d-thumb", idx),
+				File: f,
+			})
+		}
+	case InputMediaDocument:
+		switch f := m.Media.(type) {
+		case string, FileBytes, FileReader:
+			files = append(files, RequestFile{
+				Name: fmt.Sprintf("file-%d", idx),
+				File: f,
+			})
+		}
+
+		switch f := m.Thumb.(type) {
+		case string, FileBytes, FileReader:
+			files = append(files, RequestFile{
+				Name: fmt.Sprintf("file-%d", idx),
+				File: f,
+			})
+		}
+	case InputMediaAudio:
+		switch f := m.Media.(type) {
+		case string, FileBytes, FileReader:
+			files = append(files, RequestFile{
+				Name: fmt.Sprintf("file-%d", idx),
+				File: f,
+			})
+		}
+
+		switch f := m.Thumb.(type) {
+		case string, FileBytes, FileReader:
+			files = append(files, RequestFile{
+				Name: fmt.Sprintf("file-%d", idx),
+				File: f,
+			})
+		}
+	}
+
+	return files
+}
+
+// prepareInputMediaForParams calls prepareInputMediaParam for each item
+// provided and returns a new array with the correct params for a request.
+//
+// It is expected that files will get data from the associated function,
+// prepareInputMediaForFiles.
+func prepareInputMediaForParams(inputMedia []interface{}) []interface{} {
+	newMedia := make([]interface{}, len(inputMedia))
+	copy(newMedia, inputMedia)
+
+	for idx, media := range inputMedia {
+		if param := prepareInputMediaParam(media, idx); param != nil {
+			newMedia[idx] = param
+		}
+	}
+
+	return newMedia
+}
+
+// prepareInputMediaForFiles calls prepareInputMediaFile for each item
+// provided and returns a new array with the correct files for a request.
+//
+// It is expected that params will get data from the associated function,
+// prepareInputMediaForParams.
+func prepareInputMediaForFiles(inputMedia []interface{}) []RequestFile {
+	files := []RequestFile{}
+
+	for idx, media := range inputMedia {
+		if file := prepareInputMediaFile(media, idx); file != nil {
+			files = append(files, file...)
+		}
+	}
+
+	return files
 }

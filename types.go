@@ -96,6 +96,18 @@ type Update struct {
 	//
 	// optional
 	PollAnswer *PollAnswer `json:"poll_answer,omitempty"`
+	// MyChatMember is the bot's chat member status was updated in a chat. For
+	// private chats, this update is received only when the bot is blocked or
+	// unblocked by the user.
+	//
+	// optional
+	MyChatMember *ChatMemberUpdated `json:"my_chat_member"`
+	// ChatMember is a chat member's status was updated in a chat. The bot must
+	// be an administrator in the chat and must explicitly specify "chat_member"
+	// in the list of allowed_updates to receive these updates.
+	//
+	// optional
+	ChatMember *ChatMemberUpdated `json:"chat_member"`
 }
 
 // UpdatesChannel is the channel for getting updates.
@@ -111,7 +123,7 @@ func (ch UpdatesChannel) Clear() {
 // User represents a Telegram user or bot.
 type User struct {
 	// ID is a unique identifier for this user or bot
-	ID int `json:"id"`
+	ID int64 `json:"id"`
 	// IsBot true, if this user is a bot
 	//
 	// optional
@@ -166,12 +178,6 @@ func (u *User) String() string {
 	}
 
 	return name
-}
-
-// GroupChat is a group chat.
-type GroupChat struct {
-	ID    int    `json:"id"`
-	Title string `json:"title"`
 }
 
 // Chat represents a chat.
@@ -463,6 +469,11 @@ type Message struct {
 	//
 	// optional
 	ChannelChatCreated bool `json:"channel_chat_created,omitempty"`
+	// MessageAutoDeleteTimerChanged is a service message: auto-delete timer
+	// settings changed in the chat.
+	//
+	// optional
+	MessageAutoDeleteTimerChanged *MessageAutoDeleteTimerChanged `json:"message_auto_delete_timer_changed"`
 	// MigrateToChatID is the group has been migrated to a supergroup with the specified identifier.
 	// This number may be greater than 32 bits and some programming languages
 	// may have difficulty/silent defects in interpreting it.
@@ -508,6 +519,23 @@ type Message struct {
 	//
 	// optional
 	ProximityAlertTriggered *ProximityAlertTriggered `json:"proximity_alert_triggered"`
+	// VoiceChatScheduled is a service message: voice chat scheduled.
+	//
+	// optional
+	VoiceChatScheduled *VoiceChatScheduled `json:"voice_chat_scheduled"`
+	// VoiceChatStarted is a service message: voice chat started.
+	//
+	// optional
+	VoiceChatStarted *VoiceChatStarted `json:"voice_chat_started"`
+	// VoiceChatEnded is a service message: voice chat ended.
+	//
+	// optional
+	VoiceChatEnded *VoiceChatEnded `json:"voice_chat_ended"`
+	// VoiceChatParticipantsInvited is a service message: new participants
+	// invited to a voice chat.
+	//
+	// optional
+	VoiceChatParticipantsInvited *VoiceChatParticipantsInvited `json:"voice_chat_participants_invited"`
 	// ReplyMarkup is the Inline keyboard attached to the message.
 	// login_url buttons are represented as ordinary url buttons.
 	//
@@ -892,7 +920,7 @@ type Contact struct {
 	// UserID contact's user identifier in Telegram
 	//
 	// optional
-	UserID int `json:"user_id,omitempty"`
+	UserID int64 `json:"user_id,omitempty"`
 	// VCard is additional data about the contact in the form of a vCard.
 	//
 	// optional
@@ -1035,6 +1063,46 @@ type ProximityAlertTriggered struct {
 	Watcher User `json:"watcher"`
 	// Distance is the distance between the users
 	Distance int `json:"distance"`
+}
+
+// MessageAutoDeleteTimerChanged represents a service message about a change in
+// auto-delete timer settings.
+type MessageAutoDeleteTimerChanged struct {
+	// New auto-delete time for messages in the chat.
+	MessageAutoDeleteTime int `json:"message_auto_delete_time"`
+}
+
+// VoiceChatScheduled represents a service message about a voice chat scheduled
+// in the chat.
+type VoiceChatScheduled struct {
+	// Point in time (Unix timestamp) when the voice chat is supposed to be
+	// started by a chat administrator
+	StartDate int `json:"start_date"`
+}
+
+// Time converts the scheduled start date into a Time.
+func (m *VoiceChatScheduled) Time() time.Time {
+	return time.Unix(int64(m.StartDate), 0)
+}
+
+// VoiceChatStarted represents a service message about a voice chat started in
+// the chat.
+type VoiceChatStarted struct{}
+
+// VoiceChatEnded represents a service message about a voice chat ended in the
+// chat.
+type VoiceChatEnded struct {
+	// Voice chat duration; in seconds.
+	Duration int `json:"duration"`
+}
+
+// VoiceChatParticipantsInvited represents a service message about new members
+// invited to a voice chat.
+type VoiceChatParticipantsInvited struct {
+	// New members that were invited to the voice chat.
+	//
+	// optional
+	Users []User `json:"users"`
 }
 
 // UserProfilePhotos contains a set of user profile photos.
@@ -1336,6 +1404,29 @@ type ChatPhoto struct {
 	BigFileUniqueID string `json:"big_file_unique_id"`
 }
 
+// ChatInviteLink represents an invite link for a chat.
+type ChatInviteLink struct {
+	// InviteLink is the invite link. If the link was created by another chat
+	// administrator, then the second part of the link will be replaced with “…”.
+	InviteLink string `json:"invite_link"`
+	// Creator of the link.
+	Creator User `json:"creator"`
+	// IsPrimary is true, if the link is primary.
+	IsPrimary bool `json:"is_primary"`
+	// IsRevoked is true, if the link is revoked.
+	IsRevoked bool `json:"is_revoked"`
+	// ExpireDate is the point in time (Unix timestamp) when the link will
+	// expire or has been expired.
+	//
+	// optional
+	ExpireDate int `json:"expire_date"`
+	// MemberLimit is the maximum number of users that can be members of the
+	// chat simultaneously after joining the chat via this invite link; 1-99999.
+	//
+	// optional
+	MemberLimit int `json:"member_limit"`
+}
+
 // ChatMember contains information about one member of a chat.
 type ChatMember struct {
 	// User information about the user
@@ -1369,6 +1460,14 @@ type ChatMember struct {
 	//
 	// optional
 	CanBeEdited bool `json:"can_be_edited,omitempty"`
+	// CanManageChat administrators only.
+	// True, if the administrator can access the chat event log, chat
+	// statistics, message statistics in channels, see channel members, see
+	// anonymous administrators in supergoups and ignore slow mode. Implied by
+	// any other administrator privilege.
+	//
+	// optional
+	CanManageChat bool `json:"can_manage_chat"`
 	// CanPostMessages administrators only.
 	// True, if the administrator can post in the channel;
 	// channels only.
@@ -1386,6 +1485,11 @@ type ChatMember struct {
 	//
 	// optional
 	CanDeleteMessages bool `json:"can_delete_messages,omitempty"`
+	// CanManageVoiceChats administrators only.
+	// True, if the administrator can manage voice chats.
+	//
+	// optional
+	CanManageVoiceChats bool `json:"can_manage_voice_chats"`
 	// CanRestrictMembers administrators only.
 	// True, if the administrator can restrict, ban or unban chat members.
 	//
@@ -1454,6 +1558,25 @@ func (chat ChatMember) HasLeft() bool { return chat.Status == "left" }
 
 // WasKicked returns if the ChatMember was kicked from the chat.
 func (chat ChatMember) WasKicked() bool { return chat.Status == "kicked" }
+
+// ChatMemberUpdated represents changes in the status of a chat member.
+type ChatMemberUpdated struct {
+	// Chat the user belongs to.
+	Chat Chat `json:"chat"`
+	// From is the performer of the action, which resulted in the change.
+	From User `json:"from"`
+	// Date the change was done in Unix time.
+	Date int `json:"date"`
+	// Previous information about the chat member.
+	OldChatMember ChatMember `json:"old_chat_member"`
+	// New information about the chat member.
+	NewChatMember ChatMember `json:"new_chat_member"`
+	// InviteLink is the link which was used by the user to join the chat;
+	// for joining by invite link events only.
+	//
+	// optional
+	InviteLink *ChatInviteLink `json:"invite_link"`
+}
 
 // ChatPermissions describes actions that a non-administrator user is
 // allowed to take in a chat. All fields are optional.
@@ -1542,7 +1665,7 @@ type BaseInputMedia struct {
 	// pass an HTTP URL for Telegram to get a file from the Internet,
 	// or pass “attach://<file_attach_name>” to upload a new one
 	// using multipart/form-data under <file_attach_name> name.
-	Media string `json:"media"`
+	Media interface{} `json:"media"`
 	// thumb intentionally missing as it is not currently compatible
 
 	// Caption of the video to be sent, 0-1024 characters after entities parsing.
@@ -1570,6 +1693,11 @@ type InputMediaPhoto struct {
 // InputMediaVideo is a video to send as part of a media group.
 type InputMediaVideo struct {
 	BaseInputMedia
+	// Thumbnail of the file sent; can be ignored if thumbnail generation for
+	// the file is supported server-side.
+	//
+	// optional
+	Thumb interface{} `json:"thumb,omitempty"`
 	// Width video width
 	//
 	// optional
@@ -1591,6 +1719,11 @@ type InputMediaVideo struct {
 // InputMediaAnimation is an animation to send as part of a media group.
 type InputMediaAnimation struct {
 	BaseInputMedia
+	// Thumbnail of the file sent; can be ignored if thumbnail generation for
+	// the file is supported server-side.
+	//
+	// optional
+	Thumb interface{} `json:"thumb,omitempty"`
 	// Width video width
 	//
 	// optional
@@ -1608,6 +1741,11 @@ type InputMediaAnimation struct {
 // InputMediaAudio is a audio to send as part of a media group.
 type InputMediaAudio struct {
 	BaseInputMedia
+	// Thumbnail of the file sent; can be ignored if thumbnail generation for
+	// the file is supported server-side.
+	//
+	// optional
+	Thumb interface{} `json:"thumb,omitempty"`
 	// Duration of the audio in seconds
 	//
 	// optional
@@ -1625,6 +1763,11 @@ type InputMediaAudio struct {
 // InputMediaDocument is a general file to send as part of a media group.
 type InputMediaDocument struct {
 	BaseInputMedia
+	// Thumbnail of the file sent; can be ignored if thumbnail generation for
+	// the file is supported server-side.
+	//
+	// optional
+	Thumb interface{} `json:"thumb,omitempty"`
 	// DisableContentTypeDetection disables automatic server-side content type
 	// detection for files uploaded using multipart/form-data. Always true, if
 	// the document is sent as part of an album
@@ -1791,14 +1934,22 @@ type InlineQuery struct {
 	ID string `json:"id"`
 	// From sender
 	From *User `json:"from"`
-	// Location sender location, only for bots that request user location.
-	//
-	// optional
-	Location *Location `json:"location,omitempty"`
 	// Query text of the query (up to 256 characters).
 	Query string `json:"query"`
 	// Offset of the results to be returned, can be controlled by the bot.
 	Offset string `json:"offset"`
+	// Type of the chat, from which the inline query was sent. Can be either
+	// “sender” for a private chat with the inline query sender, “private”,
+	// “group”, “supergroup”, or “channel”. The chat type should be always known
+	// for requests sent from official clients and most third-party clients,
+	// unless the request was sent from a secret chat
+	//
+	// optional
+	ChatType string `json:"chat_type"`
+	// Location sender location, only for bots that request user location.
+	//
+	// optional
+	Location *Location `json:"location,omitempty"`
 }
 
 // InlineQueryResultCachedAudio is an inline query response with cached audio.
@@ -1823,7 +1974,7 @@ type InlineQueryResultCachedAudio struct {
 	// which can be specified instead of parse_mode
 	//
 	// optional
-	CaptionEntities []MessageEntity `json:"caption_entities"`
+	CaptionEntities []MessageEntity `json:"caption_entities,omitempty"`
 	// ReplyMarkup inline keyboard attached to the message
 	//
 	// optional
@@ -1864,7 +2015,7 @@ type InlineQueryResultCachedDocument struct {
 	// which can be specified instead of parse_mode
 	//
 	// optional
-	CaptionEntities []MessageEntity `json:"caption_entities"`
+	CaptionEntities []MessageEntity `json:"caption_entities,omitempty"`
 	// ReplyMarkup inline keyboard attached to the message
 	//
 	// optional
@@ -1901,7 +2052,7 @@ type InlineQueryResultCachedGIF struct {
 	// which can be specified instead of parse_mode
 	//
 	// optional
-	CaptionEntities []MessageEntity `json:"caption_entities"`
+	CaptionEntities []MessageEntity `json:"caption_entities,omitempty"`
 	// ReplyMarkup inline keyboard attached to the message.
 	//
 	// optional
@@ -1940,7 +2091,7 @@ type InlineQueryResultCachedMPEG4GIF struct {
 	// (https://core.telegram.org/bots/api#formatting-options).
 	//
 	// optional
-	CaptionEntities []MessageEntity `json:"caption_entities"`
+	CaptionEntities []MessageEntity `json:"caption_entities,omitempty"`
 	// ReplyMarkup inline keyboard attached to the message.
 	//
 	// optional
@@ -1981,7 +2132,7 @@ type InlineQueryResultCachedPhoto struct {
 	// which can be specified instead of parse_mode
 	//
 	// optional
-	CaptionEntities []MessageEntity `json:"caption_entities"`
+	CaptionEntities []MessageEntity `json:"caption_entities,omitempty"`
 	// ReplyMarkup inline keyboard attached to the message.
 	//
 	// optional
@@ -2040,7 +2191,7 @@ type InlineQueryResultCachedVideo struct {
 	// which can be specified instead of parse_mode
 	//
 	// optional
-	CaptionEntities []MessageEntity `json:"caption_entities"`
+	CaptionEntities []MessageEntity `json:"caption_entities,omitempty"`
 	// ReplyMarkup inline keyboard attached to the message
 	//
 	// optional
@@ -2075,7 +2226,7 @@ type InlineQueryResultCachedVoice struct {
 	// which can be specified instead of parse_mode
 	//
 	// optional
-	CaptionEntities []MessageEntity `json:"caption_entities"`
+	CaptionEntities []MessageEntity `json:"caption_entities,omitempty"`
 	// ReplyMarkup inline keyboard attached to the message
 	//
 	// optional
@@ -2150,7 +2301,7 @@ type InlineQueryResultAudio struct {
 	// which can be specified instead of parse_mode
 	//
 	// optional
-	CaptionEntities []MessageEntity `json:"caption_entities"`
+	CaptionEntities []MessageEntity `json:"caption_entities,omitempty"`
 	// Performer is a performer
 	//
 	// optional
@@ -2280,7 +2431,7 @@ type InlineQueryResultGIF struct {
 	// which can be specified instead of parse_mode
 	//
 	// optional
-	CaptionEntities []MessageEntity `json:"caption_entities"`
+	CaptionEntities []MessageEntity `json:"caption_entities,omitempty"`
 	// ReplyMarkup inline keyboard attached to the message
 	//
 	// optional
@@ -2386,7 +2537,7 @@ type InlineQueryResultMPEG4GIF struct {
 	// which can be specified instead of parse_mode
 	//
 	// optional
-	CaptionEntities []MessageEntity `json:"caption_entities"`
+	CaptionEntities []MessageEntity `json:"caption_entities,omitempty"`
 	// ReplyMarkup inline keyboard attached to the message
 	//
 	// optional
@@ -2446,7 +2597,7 @@ type InlineQueryResultPhoto struct {
 	// which can be specified instead of parse_mode
 	//
 	// optional
-	CaptionEntities []MessageEntity `json:"caption_entities"`
+	CaptionEntities []MessageEntity `json:"caption_entities,omitempty"`
 	// InputMessageContent content of the message to be sent instead of the photo.
 	//
 	// optional
@@ -2578,7 +2729,7 @@ type InlineQueryResultVoice struct {
 	// which can be specified instead of parse_mode
 	//
 	// optional
-	CaptionEntities []MessageEntity `json:"caption_entities"`
+	CaptionEntities []MessageEntity `json:"caption_entities,omitempty"`
 	// Duration recording duration in seconds
 	//
 	// optional
@@ -2709,6 +2860,89 @@ type InputContactMessageContent struct {
 	//
 	// optional
 	VCard string `json:"vcard,omitempty"`
+}
+
+// InputInvoiceMessageContent represents the content of an invoice message to be
+// sent as the result of an inline query.
+type InputInvoiceMessageContent struct {
+	// Product name, 1-32 characters
+	Title string `json:"title"`
+	// Product description, 1-255 characters
+	Description string `json:"description"`
+	// Bot-defined invoice payload, 1-128 bytes. This will not be displayed to
+	// the user, use for your internal processes.
+	Payload string `json:"payload"`
+	// Payment provider token, obtained via Botfather
+	ProviderToken string `json:"provider_token"`
+	// Three-letter ISO 4217 currency code
+	Currency string `json:"currency"`
+	// Price breakdown, a JSON-serialized list of components (e.g. product
+	// price, tax, discount, delivery cost, delivery tax, bonus, etc.)
+	Prices []LabeledPrice `json:"prices"`
+	// The maximum accepted amount for tips in the smallest units of the
+	// currency (integer, not float/double).
+	//
+	// optional
+	MaxTipAmount int `json:"max_tip_amount,omitempty"`
+	// An array of suggested amounts of tip in the smallest units of the
+	// currency (integer, not float/double). At most 4 suggested tip amounts can
+	// be specified. The suggested tip amounts must be positive, passed in a
+	// strictly increased order and must not exceed max_tip_amount.
+	//
+	// optional
+	SuggestedTipAmounts []int `json:"suggested_tip_amounts,omitempty"`
+	// A JSON-serialized object for data about the invoice, which will be shared
+	// with the payment provider. A detailed description of the required fields
+	// should be provided by the payment provider.
+	//
+	// optional
+	ProviderData string `json:"provider_data,omitempty"`
+	// URL of the product photo for the invoice. Can be a photo of the goods or
+	// a marketing image for a service. People like it better when they see what
+	// they are paying for.
+	//
+	// optional
+	PhotoURL string `json:"photo_url,omitempty"`
+	// Photo size
+	//
+	// optional
+	PhotoSize int `json:"photo_size,omitempty"`
+	// Photo width
+	//
+	// optional
+	PhotoWidth int `json:"photo_width,omitempty"`
+	// Photo height
+	//
+	// optional
+	PhotoHeight int `json:"photo_height,omitempty"`
+	// Pass True, if you require the user's full name to complete the order
+	//
+	// optional
+	NeedName bool `json:"need_name,omitempty"`
+	// Pass True, if you require the user's phone number to complete the order
+	//
+	// optional
+	NeedPhoneNumber bool `json:"need_phone_number,omitempty"`
+	// Pass True, if you require the user's email address to complete the order
+	//
+	// optional
+	NeedEmail bool `json:"need_email,omitempty"`
+	// Pass True, if you require the user's shipping address to complete the order
+	//
+	// optional
+	NeedShippingAddress bool `json:"need_shipping_address,omitempty"`
+	// Pass True, if user's phone number should be sent to provider
+	//
+	// optional
+	SendPhoneNumberToProvider bool `json:"send_phone_number_to_provider,omitempty"`
+	// Pass True, if user's email address should be sent to provider
+	//
+	// optional
+	SendEmailToProvider bool `json:"send_email_to_provider,omitempty"`
+	// Pass True, if the final price depends on the shipping method
+	//
+	// optional
+	IsFlexible bool `json:"is_flexible,omitempty"`
 }
 
 // LabeledPrice represents a portion of the price for goods or services.

@@ -282,17 +282,20 @@ var (
 	_ Chattable = AnimationConfig{}
 	_ Chattable = AudioConfig{}
 	_ Chattable = CallbackConfig{}
-	_ Chattable = ChatAdministratorsConfig{}
 	_ Chattable = ChatActionConfig{}
+	_ Chattable = ChatAdministratorsConfig{}
 	_ Chattable = ChatInfoConfig{}
 	_ Chattable = ChatInviteLinkConfig{}
 	_ Chattable = CloseConfig{}
-	_ Chattable = CopyMessageConfig{}
 	_ Chattable = ContactConfig{}
+	_ Chattable = CopyMessageConfig{}
+	_ Chattable = CreateChatInviteLinkConfig{}
 	_ Chattable = DeleteChatPhotoConfig{}
 	_ Chattable = DeleteChatStickerSetConfig{}
 	_ Chattable = DeleteMessageConfig{}
+	_ Chattable = DeleteWebhookConfig{}
 	_ Chattable = DocumentConfig{}
+	_ Chattable = EditChatInviteLinkConfig{}
 	_ Chattable = EditMessageCaptionConfig{}
 	_ Chattable = EditMessageLiveLocationConfig{}
 	_ Chattable = EditMessageMediaConfig{}
@@ -315,8 +318,8 @@ var (
 	_ Chattable = PinChatMessageConfig{}
 	_ Chattable = PreCheckoutConfig{}
 	_ Chattable = PromoteChatMemberConfig{}
-	_ Chattable = DeleteWebhookConfig{}
 	_ Chattable = RestrictChatMemberConfig{}
+	_ Chattable = RevokeChatInviteLinkConfig{}
 	_ Chattable = SendPollConfig{}
 	_ Chattable = SetChatDescriptionConfig{}
 	_ Chattable = SetChatPhotoConfig{}
@@ -324,8 +327,8 @@ var (
 	_ Chattable = SetGameScoreConfig{}
 	_ Chattable = ShippingConfig{}
 	_ Chattable = StickerConfig{}
-	_ Chattable = StopPollConfig{}
 	_ Chattable = StopMessageLiveLocationConfig{}
+	_ Chattable = StopPollConfig{}
 	_ Chattable = UnbanChatMemberConfig{}
 	_ Chattable = UnpinChatMessageConfig{}
 	_ Chattable = UpdateConfig{}
@@ -335,4 +338,25 @@ var (
 	_ Chattable = VideoNoteConfig{}
 	_ Chattable = VoiceConfig{}
 	_ Chattable = WebhookConfig{}
+)
+
+// Ensure all Fileable types are correct.
+var (
+	_ Fileable = (*PhotoConfig)(nil)
+	_ Fileable = (*AudioConfig)(nil)
+	_ Fileable = (*DocumentConfig)(nil)
+	_ Fileable = (*StickerConfig)(nil)
+	_ Fileable = (*VideoConfig)(nil)
+	_ Fileable = (*AnimationConfig)(nil)
+	_ Fileable = (*VideoNoteConfig)(nil)
+	_ Fileable = (*VoiceConfig)(nil)
+	_ Fileable = (*SetChatPhotoConfig)(nil)
+	_ Fileable = (*EditMessageMediaConfig)(nil)
+	_ Fileable = (*SetChatPhotoConfig)(nil)
+	_ Fileable = (*UploadStickerConfig)(nil)
+	_ Fileable = (*NewStickerSetConfig)(nil)
+	_ Fileable = (*AddStickerConfig)(nil)
+	_ Fileable = (*MediaGroupConfig)(nil)
+	_ Fileable = (*WebhookConfig)(nil)
+	_ Fileable = (*SetStickerSetThumbConfig)(nil)
 )
